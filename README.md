@@ -30,6 +30,7 @@ I want a security tool that follows 'the ruby way'.
 * SQL and CSV output. Suitable for script integration
 * Massive websites scan from text file
 * SSL server rating using [Qualys SSL Labs rating guide](https://www.ssllabs.com/projects/rating-guide/)
+* Whitebox testing using existing wordpress user
 
 
 ## Installation

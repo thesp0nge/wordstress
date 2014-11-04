@@ -8,9 +8,9 @@ Gem::Specification.new do |spec|
   spec.version       = Wordstress::VERSION
   spec.authors       = ["Paolo Perego"]
   spec.email         = ["thesp0nge@gmail.com"]
-  spec.summary       = %q{TODO: Write a short summary. Required.}
-  spec.description   = %q{TODO: Write a longer description. Optional.}
-  spec.homepage      = ""
+  spec.summary       = %q{wordstress is a security scanner for wordpress powered websites}
+  spec.description   = %q{wordstress is a security scanner for wordpress powered websites}
+  spec.homepage      = "https://github.com/thesp0nge/wordstress"
   spec.license       = "MIT"
 
   spec.files         = `git ls-files -z`.split("\x0")

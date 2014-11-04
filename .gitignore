@@ -1,4 +1,5 @@
 *.sw?
+.rvmrc
 .DS_Store
 /.bundle/
 /.yardoc

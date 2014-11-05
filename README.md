@@ -22,6 +22,16 @@ smaller project.
 Another thing I don't like about wpscan is that isn't distributed as ruby gem.
 I want a security tool that follows 'the ruby way'.
 
+Furthermore, wordstress is designed to be more accurate in whitebox testing.
+During those years I was very upset as pentester with false positives about
+themes and plugins and their version. Since an authenticated check is necessary
+to match scan results with installed plugin (or theme) version, I tought it was
+a better idea to start authenticated from the beginning.
+
+Of course, wordstress will perform blackbox testing, trying to guess the
+installed wordpress version and listing vulnerabilities taken from
+[wpvulndb](https://wpvulndb.com).
+
 ## Killing features
 
 * A great knowledge base powered by [wpvulndb API](https://wpvulndb.com)
@@ -30,7 +40,8 @@ I want a security tool that follows 'the ruby way'.
 * SQL and CSV output. Suitable for script integration
 * Massive websites scan from text file
 * SSL server rating using [Qualys SSL Labs rating guide](https://www.ssllabs.com/projects/rating-guide/)
-* Whitebox testing using existing wordpress user
+* Whitebox testing using existing wordpress user for template and themes
+  vulnerabilities.
 
 
 ## Installation

@@ -42,10 +42,15 @@ $logger.die("missing target") if target.nil?
 
 $logger.log "scanning #{target}"
 site = Wordstress::Site.new(target)
+
+if site.version[:version] == "0.0.0"
+  $logger.err "can't detect wordpress version running on #{target}. Giving up!"
+  Kernel.exit(-2)
+end
+
 $logger.ok "wordpress version #{site.version[:version]} detected"
 wp_vuln_hash = JSON.parse(site.wp_vuln_json)
 $logger.ok "#{wp_vuln_hash["wordpress"]["vulnerabilities"].size} vulnerabilities found due wordpress version"
 wp_vuln_hash["wordpress"]["vulnerabilities"].each do |v|
   $logger.log "#{v["id"]} - #{v["title"]}"
-
 end

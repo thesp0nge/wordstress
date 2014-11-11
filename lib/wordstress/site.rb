@@ -18,8 +18,8 @@ module Wordstress
       @homepage     = get(@raw_name)
       @version      = detect_version
 
-      @wp_vuln_json = get_wp_vulnerabilities
-
+      @wp_vuln_json = get_wp_vulnerabilities  unless @version[:version] == "0.0.0"
+      @wp_vuln_json = Hash.new.to_json        if @version[:version] == "0.0.0"
     end
 
     def get_wp_vulnerabilities
@@ -61,6 +61,9 @@ module Wordstress
 
       return {:version => v_meta, :accuracy => 1.0} if v_meta == v_readme && v_meta == v_rss
       return {:version => v_meta, :accuracy => 0.8} if v_meta == v_readme || v_meta == v_rss
+
+      # we failed detecting wordpress version
+      return {:version => "0.0.0", :accuracy => 0}
     end
 
     def get(page)

@@ -23,4 +23,6 @@ Gem::Specification.new do |spec|
 
   spec.add_dependency 'codesake-commons'
   spec.add_dependency 'json'
+  spec.add_dependency 'ciphersurfer'
+
 end

@@ -3,16 +3,17 @@ require 'net/http'
 module Wordstress
   class Site
 
-    attr_reader :version, :wp_vuln_json, :plugins
-    def initialize(options=>{:target=>"http://localhost", :scanning_mode=>:gentleman})
+    attr_reader :version, :scanning_mode, :wp_vuln_json, :plugins, :themes
+
+    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman})
       begin
         @uri      = URI(options[:target])
-        @raw_name = name
+        @raw_name = options[:target]
         @valid    = true
       rescue
         @valid = false
       end
-      @mode         = options[:scanning_mode]
+      @scanning_mode = options[:scanning_mode]
 
       @robots_txt   = get(@raw_name + "/robots.txt")
       @readme_html  = get(@raw_name + "/readme.html")
@@ -24,6 +25,7 @@ module Wordstress
       @wp_vuln_json = Hash.new.to_json        if @version[:version] == "0.0.0"
 
       @plugins      = find_plugins
+      @themes       = find_themes
     end
 
     def get_wp_vulnerabilities
@@ -88,14 +90,34 @@ module Wordstress
       return @online
     end
 
+    def find_themes
+      return find_themes_gentleman if @scanning_mode == :gentleman
+      return []
+    end
     def find_plugins
-      return find_plugins_gentleman if @mode == :gentleman
+      return find_plugins_gentleman if @scanning_mode == :gentleman
       return []
     end
 
     private
+    def find_themes_gentleman 
+      ret = []
+      doc = Nokogiri::HTML(@homepage.body)
+      doc.css('link').each do |link|
+        if link.attr('href').include?("wp-content/themes")
+        theme = theme_name(link.attr('href')) 
+        ret << theme if ret.index(theme).nil?
+        end
+      end
+      ret
+    end
+
+    def theme_name(url)
+      url.match(/\/wp-content\/themes\/(\w)+/)[0].split('/').last
+    end
     def find_plugins_gentleman
       doc = Nokogiri::HTML(@homepage.body)
+      doc.css('link')
 
     end
 

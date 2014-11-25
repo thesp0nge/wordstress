@@ -71,7 +71,7 @@ if site.version[:version] == "0.0.0"
 end
 
 $logger.ok "wordpress version #{site.version[:version]} detected"
-
+$logger.warn "scan mode is set to 'gentleman'. We are using only information found on resulting HTML. This can be lead to undetected plugins or themes" if site.scanning_mode == :gentleman
 if site.online?
   wp_vuln_hash = JSON.parse(site.wp_vuln_json)
   $logger.ok "#{wp_vuln_hash["wordpress"]["vulnerabilities"].size} vulnerabilities found due wordpress version"
@@ -82,4 +82,6 @@ else
   $logger.err "it seems we are offline. wordstress can't reach https://wpvulndb.com"
   $logger.err "wordpress can't enumerate vulnerabilities"
 end
-$logger.debug site.plugins
+$logger.log "#{target} themes"
+$logger.debug site.themes
+$logger.bye

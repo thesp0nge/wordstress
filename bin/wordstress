@@ -9,7 +9,7 @@ require 'wordstress'
 APPNAME = File.basename($0)
 
 $logger  = Codesake::Commons::Logging.instance
-@output_root = Dir.home + '/wordstress'
+@output_root = File.join(Dir.home, '/wordstress')
 
 opts    = GetoptLong.new(
   [ '--csv',      '-C',   GetoptLong::NO_ARGUMENT],
@@ -38,7 +38,7 @@ end
 target=ARGV.shift
 $logger.helo APPNAME, Wordstress::VERSION
 $logger.toggle_syslog
-@output_dir = @output_root + target_to_dirname(target)
+@output_dir = File.join(@output_root, Wordstress::Utils.target_to_dirname(target))
 
 unless Dir.exists?(@output_root)
   $logger.ok "creating output dir #{@output_root}"

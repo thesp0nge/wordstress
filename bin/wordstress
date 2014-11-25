@@ -82,6 +82,18 @@ else
   $logger.err "it seems we are offline. wordstress can't reach https://wpvulndb.com"
   $logger.err "wordpress can't enumerate vulnerabilities"
 end
-$logger.log "#{target} themes"
-$logger.debug site.themes
+$logger.log "#{target} has #{site.themes.count} themes"
+site.themes.each do |t|
+  $logger.log "searching wpvulndb for theme #{t} vulnerabilities"
+  v = site.get_theme_vulnerabilities(t)
+  $logger.debug v
+end
+
+$logger.log "#{target} has #{site.plugins.count} plugins"
+site.plugins.each do |t|
+  $logger.log "searching wpvulndb for plugin #{t} vulnerabilities"
+  v = site.get_plugin_vulnerabilities(t)
+  $logger.debug v
+end
+
 $logger.bye

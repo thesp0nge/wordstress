@@ -46,7 +46,7 @@ unless Dir.exists?(@output_root)
 end
 
 unless Dir.exists?(@output_dir)
-  $logger.ok "
+  $logger.ok "storing results to #{@output_dir}"
 end
 
 trap("INT")   { $logger.die('[INTERRUPTED]') }

@@ -63,7 +63,7 @@ trap("INT")   { $logger.die('[INTERRUPTED]') }
 $logger.die("missing target") if target.nil?
 
 $logger.log "scanning #{target}"
-site = Wordstress::Site.new(target)
+site = Wordstress::Site.new({:target=>target, :scanning_mode=>scanning_mode})
 
 if site.version[:version] == "0.0.0"
   $logger.err "can't detect wordpress version running on #{target}. Giving up!"
@@ -82,3 +82,4 @@ else
   $logger.err "it seems we are offline. wordstress can't reach https://wpvulndb.com"
   $logger.err "wordpress can't enumerate vulnerabilities"
 end
+$logger.debug site.plugins

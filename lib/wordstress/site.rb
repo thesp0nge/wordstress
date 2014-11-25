@@ -3,15 +3,16 @@ require 'net/http'
 module Wordstress
   class Site
 
-    attr_reader :version, :wp_vuln_json
-    def initialize(name="")
+    attr_reader :version, :wp_vuln_json, :plugins
+    def initialize(options=>{:target=>"http://localhost", :scanning_mode=>:gentleman})
       begin
-        @uri      = URI(name)
+        @uri      = URI(options[:target])
         @raw_name = name
         @valid    = true
       rescue
         @valid = false
       end
+      @mode         = options[:scanning_mode]
 
       @robots_txt   = get(@raw_name + "/robots.txt")
       @readme_html  = get(@raw_name + "/readme.html")
@@ -21,6 +22,8 @@ module Wordstress
 
       @wp_vuln_json = get_wp_vulnerabilities  unless @version[:version] == "0.0.0"
       @wp_vuln_json = Hash.new.to_json        if @version[:version] == "0.0.0"
+
+      @plugins      = find_plugins
     end
 
     def get_wp_vulnerabilities
@@ -85,8 +88,8 @@ module Wordstress
       return @online
     end
 
-    def find_plugins(scanning_mode)
-      return find_plugins_gentleman if scanning_mode == :gentleman
+    def find_plugins
+      return find_plugins_gentleman if @mode == :gentleman
       return []
     end
 

@@ -17,13 +17,20 @@ module Wordstress
       @readme_html  = get(@raw_name + "/readme.html")
       @homepage     = get(@raw_name)
       @version      = detect_version
+      @online       = true
 
       @wp_vuln_json = get_wp_vulnerabilities  unless @version[:version] == "0.0.0"
       @wp_vuln_json = Hash.new.to_json        if @version[:version] == "0.0.0"
     end
 
     def get_wp_vulnerabilities
-      get_https("https://wpvulndb.com/api/v1/wordpresses/#{version_pad(@version[:version])}").body
+      begin
+        return get_https("https://wpvulndb.com/api/v1/wordpresses/#{version_pad(@version[:version])}").body
+      rescue => e
+        $logger.err e.message
+        @online = false
+        return ""
+      end
     end
 
     def version_pad(version)
@@ -74,8 +81,21 @@ module Wordstress
     def is_valid?
       return @valid
     end
+    def online?
+      return @online
+    end
+
+    def find_plugins(scanning_mode)
+      return find_plugins_gentleman if scanning_mode == :gentleman
+      return []
+    end
 
     private
+    def find_plugins_gentleman
+      doc = Nokogiri::HTML(@homepage.body)
+
+    end
+
     def get_http(page)
       uri = URI.parse(page)
       http = Net::HTTP.new(uri.host, uri.port)

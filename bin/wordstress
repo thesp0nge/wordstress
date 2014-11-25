@@ -6,12 +6,22 @@ require 'codesake-commons'
 
 require 'wordstress'
 
+# Scanning modes for plugins and themes
+#   + gentleman: wordstress will try to fetch plugins and themes only using
+#     info in the HTML page (this is very polite but also very inaccurate).
+#   + interactive: wordstress will use a target installed plugin to fetch
+#     installed plugins and themes with their version
+#   + aggressive: wordstress will use enumeration to find installed plugins and
+#     themes. This will lead to false positives.
+MODES = [:gentleman,:interactive,:aggressive]
 APPNAME = File.basename($0)
 
 $logger  = Codesake::Commons::Logging.instance
 @output_root = File.join(Dir.home, '/wordstress')
+scanning_mode = :gentleman
 
 opts    = GetoptLong.new(
+  [ '--gentleman','-G',   GetoptLong::NO_ARGUMENT],
   [ '--csv',      '-C',   GetoptLong::NO_ARGUMENT],
   [ '--version',  '-v',   GetoptLong::NO_ARGUMENT],
   [ '--help',     '-h',   GetoptLong::NO_ARGUMENT]
@@ -61,8 +71,14 @@ if site.version[:version] == "0.0.0"
 end
 
 $logger.ok "wordpress version #{site.version[:version]} detected"
-wp_vuln_hash = JSON.parse(site.wp_vuln_json)
-$logger.ok "#{wp_vuln_hash["wordpress"]["vulnerabilities"].size} vulnerabilities found due wordpress version"
-wp_vuln_hash["wordpress"]["vulnerabilities"].each do |v|
-  $logger.log "#{v["id"]} - #{v["title"]}"
+
+if site.online?
+  wp_vuln_hash = JSON.parse(site.wp_vuln_json)
+  $logger.ok "#{wp_vuln_hash["wordpress"]["vulnerabilities"].size} vulnerabilities found due wordpress version"
+  wp_vuln_hash["wordpress"]["vulnerabilities"].each do |v|
+    $logger.log "#{v["id"]} - #{v["title"]}"
+  end
+else
+  $logger.err "it seems we are offline. wordstress can't reach https://wpvulndb.com"
+  $logger.err "wordpress can't enumerate vulnerabilities"
 end

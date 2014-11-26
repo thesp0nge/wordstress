@@ -38,7 +38,9 @@ module Wordstress
 
     def get_plugin_vulnerabilities(theme)
       begin
-        return get_https("https://wpvulndb.com/api/v1/plugins/#{theme}").body
+        json= get_https("https://wpvulndb.com/api/v1/plugins/#{theme}").body
+        return "Plugin #{theme} is not present on wpvulndb.com" if json.include?"The page you were looking for doesn't exist (404)"
+        return json
       rescue => e
         $logger.err e.message
         @online = false
@@ -48,7 +50,9 @@ module Wordstress
 
     def get_theme_vulnerabilities(theme)
       begin
-        return get_https("https://wpvulndb.com/api/v1/themes/#{theme}").body
+        json=get_https("https://wpvulndb.com/api/v1/themes/#{theme}").body
+        return "Theme #{theme} is not present on wpvulndb.com" if json.include?"The page you were looking for doesn't exist (404)"
+        return json
       rescue => e
         $logger.err e.message
         @online = false

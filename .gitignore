@@ -1,4 +1,6 @@
 *.sw?
+plugins.db
+themes.db
 .rvmrc
 .DS_Store
 /.bundle/

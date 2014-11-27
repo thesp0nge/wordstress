@@ -1,3 +1,3 @@
 module Wordstress
-  VERSION = "0.10.3"
+  VERSION = "0.15.0"
 end

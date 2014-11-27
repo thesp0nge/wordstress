@@ -3,27 +3,71 @@ require 'net/http'
 module Wordstress
   class Site
 
-    attr_reader :version, :wp_vuln_json
-    def initialize(name="")
+    attr_reader :version, :scanning_mode, :wp_vuln_json, :plugins, :themes, :themes_vuln_json
+
+    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman})
       begin
-        @uri      = URI(name)
-        @raw_name = name
+        @uri      = URI(options[:target])
+        @raw_name = options[:target]
         @valid    = true
       rescue
         @valid = false
       end
+      @scanning_mode = options[:scanning_mode]
 
       @robots_txt   = get(@raw_name + "/robots.txt")
       @readme_html  = get(@raw_name + "/readme.html")
       @homepage     = get(@raw_name)
       @version      = detect_version
+      @online       = true
 
       @wp_vuln_json = get_wp_vulnerabilities  unless @version[:version] == "0.0.0"
       @wp_vuln_json = Hash.new.to_json        if @version[:version] == "0.0.0"
+
+      @plugins      = find_plugins
+      @themes       = find_themes
+      # @themes_vuln_json = get_themes_vulnerabilities
+    end
+
+    def get_themes_vulnerabilities
+      vuln = []
+      @themes.each do |t|
+        vuln << {:theme=>t, :vulns=>get_theme_vulnerabilities(t)}
+      end
+    end
+
+    def get_plugin_vulnerabilities(theme)
+      begin
+        json= get_https("https://wpvulndb.com/api/v1/plugins/#{theme}").body
+        return "Plugin #{theme} is not present on wpvulndb.com" if json.include?"The page you were looking for doesn't exist (404)"
+        return json
+      rescue => e
+        $logger.err e.message
+        @online = false
+        return []
+      end
+    end
+
+    def get_theme_vulnerabilities(theme)
+      begin
+        json=get_https("https://wpvulndb.com/api/v1/themes/#{theme}").body
+        return "Theme #{theme} is not present on wpvulndb.com" if json.include?"The page you were looking for doesn't exist (404)"
+        return json
+      rescue => e
+        $logger.err e.message
+        @online = false
+        return []
+      end
     end
 
     def get_wp_vulnerabilities
-      get_https("https://wpvulndb.com/api/v1/wordpresses/#{version_pad(@version[:version])}").body
+      begin
+        return get_https("https://wpvulndb.com/api/v1/wordpresses/#{version_pad(@version[:version])}").body
+      rescue => e
+        $logger.err e.message
+        @online = false
+        return ""
+      end
     end
 
     def version_pad(version)
@@ -74,8 +118,66 @@ module Wordstress
     def is_valid?
       return @valid
     end
+    def online?
+      return @online
+    end
+
+    def find_themes
+      return find_themes_gentleman if @scanning_mode == :gentleman
+      return []
+    end
+    def find_plugins
+      return find_plugins_gentleman if @scanning_mode == :gentleman
+
+      # bruteforce check must start with error page discovery.
+      # the idea is to send 2 random plugin names (e.g. 2 sha256 of time seed)
+      # and see how webserver answers and then understand if we can rely on a
+      # pattern for the error page.
+      return []
+    end
 
     private
+    def find_themes_gentleman
+      ret = []
+      doc = Nokogiri::HTML(@homepage.body)
+      doc.css('link').each do |link|
+        if link.attr('href').include?("wp-content/themes")
+        theme = theme_name(link.attr('href'))
+        ret << theme if ret.index(theme).nil?
+        end
+      end
+      ret
+    end
+
+    def theme_name(url)
+      url.match(/\/wp-content\/themes\/(\w)+/)[0].split('/').last
+    end
+    def plugin_name(url)
+      url.match(/\/wp-content\/plugins\/(\w)+/)[0].split('/').last
+    end
+
+    def find_plugins_gentleman
+      ret = []
+      doc = Nokogiri::HTML(@homepage.body)
+      doc.css('script').each do |link|
+        if ! link.attr('src').nil?
+          if link.attr('src').include?("wp-content/plugins")
+          plugin = plugin_name(link.attr('src'))
+          ret << plugin if ret.index(plugin).nil?
+          end
+        end
+      end
+      doc.css('link').each do |link|
+        if link.attr('href').include?("wp-content/plugins")
+        plugin = plugin_name(link.attr('href'))
+        ret << plugin if ret.index(plugin).nil?
+        end
+
+      end
+
+      ret
+    end
+
     def get_http(page)
       uri = URI.parse(page)
       http = Net::HTTP.new(uri.host, uri.port)

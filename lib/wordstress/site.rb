@@ -99,9 +99,13 @@ module Wordstress
 
       v_rss = ""
       rss_doc = Nokogiri::HTML(@homepage.body)
-      rss = Nokogiri::HTML(get(rss_doc.css('link[type="application/rss+xml"]').first.attr('href')).body)
+      begin
+        rss = Nokogiri::HTML(get(rss_doc.css('link[type="application/rss+xml"]').first.attr('href')).body) unless l.nil?
+        v_rss= rss.css('generator').text.split('=')[1]
+      rescue => e
+        v_rss = "0.0.0"
+      end
 
-      v_rss= rss.css('generator').text.split('=')[1]
 
       return {:version => v_meta, :accuracy => 1.0} if v_meta == v_readme && v_meta == v_rss
       return {:version => v_meta, :accuracy => 0.8} if v_meta == v_readme || v_meta == v_rss

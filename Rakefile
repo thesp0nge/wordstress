@@ -1,5 +1,17 @@
 require "bundler/gem_tasks"
 
+namespace :update do
+  desc 'Update themes'
+  task :themes, :name do |t,args|
+
+  end
+
+  desc 'Update plugins'
+  task :plugins, :name do |t, args|
+
+  end
+
+end
 namespace :import do
   desc 'Import themes'
   task :themes, :name do |t,args|

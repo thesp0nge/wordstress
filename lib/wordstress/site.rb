@@ -152,12 +152,18 @@ module Wordstress
     end
 
     private
+    def is_already_detected?(array, name)
+      a = array.detect {|elem| elem[:name] == name }
+      return false if array.empty?
+      return (!a.nil?)
+    end
+
     def find_plugins_interactive
       ret = []
       doc = Nokogiri::HTML(@wordstress_page.body)
       doc.css('#all_plugin').each do |link|
         l=link.text.split(',')
-        ret << {:name=>l[2], :version=>l[1], :status=>l[3]}
+        ret << {:name=>l[2], :version=>l[1], :status=>l[3]} unless is_already_detected?(ret, l[2])
       end
       $logger.debug ret
       ret
@@ -167,7 +173,7 @@ module Wordstress
       doc = Nokogiri::HTML(@wordstress_page.body)
       doc.css('#all_theme').each do |link|
         l=link.text.split(',')
-        ret << {:name=>l[2], :version=>l[1]}
+        ret << {:name=>l[2], :version=>l[1]} unless is_already_detected?(ret, l[2])
       end
       $logger.debug ret
       ret
@@ -179,7 +185,7 @@ module Wordstress
       doc.css('link').each do |link|
         if link.attr('href').include?("wp-content/themes")
         theme = theme_name(link.attr('href'))
-        ret << {:name=>theme, :version=>""} if ret.index(theme).nil?
+        ret << {:name=>theme, :version=>""} unless is_already_detected?(ret, theme)
         end
       end
       ret
@@ -199,7 +205,7 @@ module Wordstress
         if ! link.attr('src').nil?
           if link.attr('src').include?("wp-content/plugins")
           plugin = plugin_name(link.attr('src'))
-          ret << {:name=>plugin, :version=>"", :status=>"active"} if ret.index(plugin).nil?
+          ret << {:name=>plugin, :version=>"", :status=>"active"} unless is_already_detected?(ret, plugin)
           end
         end
       end

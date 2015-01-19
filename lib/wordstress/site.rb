@@ -5,7 +5,7 @@ module Wordstress
 
     attr_reader :version, :scanning_mode, :wp_vuln_json, :plugins, :themes, :themes_vuln_json
 
-    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman})
+    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman, :interactive=>{}})
       begin
         @uri      = URI(options[:target])
         @raw_name = options[:target]
@@ -24,6 +24,8 @@ module Wordstress
       @wp_vuln_json = get_wp_vulnerabilities  unless @version[:version] == "0.0.0"
       @wp_vuln_json = Hash.new.to_json        if @version[:version] == "0.0.0"
 
+      @wordstress_page = post_and_get(options[:interactive][:url], options[:interactive][:pwd]) if options[:scanning_mode] == :interactive && !options[:interactive][:pwd].empty?
+      @wordstress_page = get(options[:interactive][:url]) if options[:scanning_mode] == :interactive && options[:interactive][:pwd].empty?
       @plugins      = find_plugins
       @themes       = find_themes
       # @themes_vuln_json = get_themes_vulnerabilities
@@ -127,11 +129,13 @@ module Wordstress
     end
 
     def find_themes
-      return find_themes_gentleman if @scanning_mode == :gentleman
+      return find_themes_gentleman  if @scanning_mode == :gentleman
+      return find_themes_interactive if @scanning_mode == :interactive
       return []
     end
     def find_plugins
       return find_plugins_gentleman if @scanning_mode == :gentleman
+      return find_plugins_interactive if @scanning_mode == :interactive
 
       # bruteforce check must start with error page discovery.
       # the idea is to send 2 random plugin names (e.g. 2 sha256 of time seed)
@@ -140,14 +144,42 @@ module Wordstress
       return []
     end
 
+    def post_and_get(url, pass)
+      uri = URI(url)
+      res = Net::HTTP.post_form(uri, {'post_password' => pass, 'Submit'=>'Submit'})
+      get(url)
+      res.body
+    end
+
     private
+    def find_plugins_interactive
+      ret = []
+      doc = Nokogiri::HTML(@wordstress_page.body)
+      doc.css('#all_plugin').each do |link|
+        l=link.text.split(',')
+        ret << {:name=>l[2], :version=>l[1], :status=>l[3]}
+      end
+      $logger.debug ret
+      ret
+    end
+    def find_themes_interactive
+      ret = []
+      doc = Nokogiri::HTML(@wordstress_page.body)
+      doc.css('#all_theme').each do |link|
+        l=link.text.split(',')
+        ret << {:name=>l[2], :version=>l[1]}
+      end
+      $logger.debug ret
+      ret
+    end
+
     def find_themes_gentleman
       ret = []
       doc = Nokogiri::HTML(@homepage.body)
       doc.css('link').each do |link|
         if link.attr('href').include?("wp-content/themes")
         theme = theme_name(link.attr('href'))
-        ret << theme if ret.index(theme).nil?
+        ret << {:name=>theme, :version=>""} if ret.index(theme).nil?
         end
       end
       ret
@@ -167,7 +199,7 @@ module Wordstress
         if ! link.attr('src').nil?
           if link.attr('src').include?("wp-content/plugins")
           plugin = plugin_name(link.attr('src'))
-          ret << plugin if ret.index(plugin).nil?
+          ret << {:name=>plugin, :version=>"", :status=>"active"} if ret.index(plugin).nil?
           end
         end
       end

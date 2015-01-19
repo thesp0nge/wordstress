@@ -19,12 +19,16 @@ APPNAME = File.basename($0)
 $logger  = Codesake::Commons::Logging.instance
 @output_root = File.join(Dir.home, '/wordstress')
 scanning_mode = :gentleman
+interactive = {:url=>"", :pwd=>""}
 
 opts    = GetoptLong.new(
-  [ '--gentleman','-G',   GetoptLong::NO_ARGUMENT],
-  [ '--csv',      '-C',   GetoptLong::NO_ARGUMENT],
-  [ '--version',  '-v',   GetoptLong::NO_ARGUMENT],
-  [ '--help',     '-h',   GetoptLong::NO_ARGUMENT]
+  [ '--gentleman',  '-G',   GetoptLong::NO_ARGUMENT],
+  [ '--interactive','-I',   GetoptLong::NO_ARGUMENT],
+  [ '--interactive-url', '-u', GetoptLong::REQUIRED_ARGUMENT],
+  [ '--interactive-pwd', '-p', GetoptLong::REQUIRED_ARGUMENT],
+  [ '--csv',        '-C',   GetoptLong::NO_ARGUMENT],
+  [ '--version',    '-v',   GetoptLong::NO_ARGUMENT],
+  [ '--help',       '-h',   GetoptLong::NO_ARGUMENT]
 )
 
 opts.quiet=true
@@ -32,6 +36,12 @@ opts.quiet=true
 begin
   opts.each do |opt, val|
     case opt
+    when '--interactive'
+      scanning_mode = :interactive
+    when '--interactive-url'
+      interactive[:url] = val
+    when '--interactive-pwd'
+      interactive[:pwd] = val
     when '--version'
       puts "#{Wordstress::VERSION}"
       Kernel.exit(0)
@@ -63,7 +73,7 @@ trap("INT")   { $logger.die('[INTERRUPTED]') }
 $logger.die("missing target") if target.nil?
 
 $logger.log "scanning #{target}"
-site = Wordstress::Site.new({:target=>target, :scanning_mode=>scanning_mode})
+site = Wordstress::Site.new({:target=>target, :scanning_mode=>scanning_mode, :interactive=>interactive})
 
 if site.version[:version] == "0.0.0"
   $logger.err "can't detect wordpress version running on #{target}. Giving up!"

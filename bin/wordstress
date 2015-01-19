@@ -2,6 +2,7 @@
 
 require 'getoptlong'
 require 'json'
+require 'fileutils'
 require 'codesake-commons'
 
 require 'wordstress'
@@ -58,16 +59,15 @@ end
 target=ARGV.shift
 $logger.helo APPNAME, Wordstress::VERSION
 $logger.toggle_syslog
-@output_dir = File.join(@output_root, Wordstress::Utils.target_to_dirname(target))
 
 unless Dir.exists?(@output_root)
   $logger.ok "creating output dir #{@output_root}"
   Dir.mkdir @output_root
 end
 
-unless Dir.exists?(@output_dir)
-  $logger.ok "storing results to #{@output_dir}"
-end
+@output_dir = Wordstress::Utils.build_output_dir(@output_root, target)
+$logger.ok "storing results to #{@output_dir}"
+FileUtils::mkdir_p(@output_dir)
 
 trap("INT")   { $logger.die('[INTERRUPTED]') }
 $logger.die("missing target") if target.nil?

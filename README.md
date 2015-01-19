@@ -27,10 +27,15 @@ During those years I was very upset as pentester with false positives about
 themes and plugins and their version. Since an authenticated check is necessary
 to match scan results with installed plugin (or theme) version, I tought it was
 a better idea to start authenticated from the beginning.
+** UPDATE ** - this can be very tricky to accomplish
 
 Of course, wordstress will perform blackbox testing, trying to guess the
 installed wordpress version and listing vulnerabilities taken from
 [wpvulndb](https://wpvulndb.com).
+
+## Online resource
+
+[Attacking Wordpress](http://hackertarget.com/attacking-wordpress/)
 
 ## Killing features
 

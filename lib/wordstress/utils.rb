@@ -1,9 +1,15 @@
+require 'URI'
+
 module Wordstress
   class Utils
 
     # Transform a given URL into a directory name to be used to store data
     def self.target_to_dirname(target)
-      target.split("://")[1].gsub('.','_').gsub('/', '').gsub(':', '_')
+      uri = URI.parse(target)
+      path = uri.request_uri.split('/')
+      blog_path = ""
+      blog_path = "_#{path[1]}" if path.count >= 2
+      return "#{uri.host}_#{uri.port}#{blog_path}"
     end
 
     def self.build_output_dir(root, target)

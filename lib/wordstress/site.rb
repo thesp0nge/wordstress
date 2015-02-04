@@ -5,7 +5,7 @@ module Wordstress
 
     attr_reader :version, :scanning_mode, :wp_vuln_json, :plugins, :themes, :themes_vuln_json
 
-    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman, :interactive=>{}})
+    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman, :interactive=>{}, :basic_auth=>{:user=>"", :pwd=>""}})
       begin
         @uri      = URI(options[:target])
         @raw_name = options[:target]
@@ -14,6 +14,9 @@ module Wordstress
         @valid = false
       end
       @scanning_mode = options[:scanning_mode]
+
+      @basic_auth_user = options[:basic_auth][:user]
+      @basic_auth_pwd = options[:basic_auth][:pwd]
 
       @robots_txt   = get(@raw_name + "/robots.txt")
       @readme_html  = get(@raw_name + "/readme.html")
@@ -224,6 +227,8 @@ module Wordstress
       uri = URI.parse(page)
       http = Net::HTTP.new(uri.host, uri.port)
       request = Net::HTTP::Get.new(uri.request_uri)
+      request.basic_auth @basic_auth_user, @basic_auth_pwd unless @basic_auth_user == ""
+
       return http.request(request)
     end
     def get_https(page)
@@ -231,6 +236,7 @@ module Wordstress
       http = Net::HTTP.new(uri.host, uri.port)
       http.use_ssl = true
       request = Net::HTTP::Get.new(uri.request_uri)
+      request.basic_auth @basic_auth_user, @basic_auth_pwd unless @basic_auth_user == ""
       return http.request(request)
 
     end

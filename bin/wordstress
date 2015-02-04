@@ -103,16 +103,16 @@ else
 end
 $logger.log "#{target} has #{site.themes.count} themes"
 site.themes.each do |t|
-  $logger.log "searching wpvulndb for theme #{t[:name]} vulnerabilities"
+  # $logger.log "searching wpvulndb for theme #{t[:name]} vulnerabilities"
   v = site.get_theme_vulnerabilities(t[:name])
   $logger.debug v
 end
 
 $logger.log "#{target} has #{site.plugins.count} plugins"
 site.plugins.each do |t|
-  $logger.log "searching wpvulndb for plugin #{t[:name]} vulnerabilities"
+  # $logger.log "searching wpvulndb for plugin #{t[:name]} vulnerabilities"
   v = site.get_plugin_vulnerabilities(t[:name])
-  $logger.debug v
+  $logger.debug v["plugin"]["vulnerabilities"] unless v["plugin"].nil?
 end
 
 $logger.bye

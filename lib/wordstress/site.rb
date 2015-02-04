@@ -18,18 +18,16 @@ module Wordstress
       @basic_auth_user = options[:basic_auth][:user]
       @basic_auth_pwd = options[:basic_auth][:pwd]
 
-      @robots_txt   = get(@raw_name + "/robots.txt")
-      @readme_html  = get(@raw_name + "/readme.html")
 
       unless scanning_mode == :whitebox
 
+        @robots_txt   = get(@raw_name + "/robots.txt")
+        @readme_html  = get(@raw_name + "/readme.html")
         @homepage     = get(@raw_name)
-        @version      = detect_version(@homepage)
+        @version      = detect_version(@homepage, false)
       else
         @wordstress_page = get("#{options[:whitebox][:url]}?wordstress-key=#{options[:whitebox][:key]}") if options[:scanning_mode] == :whitebox
-        @version      = detect_version(@wordstress_page)
-        $logger.debug "#{options[:whitebox][:url]}?wordstress-key=#{options[:whitebox][:key]}"
-        $logger.debug @wordstress_page.body
+        @version      = detect_version(@wordstress_page, true)
       end
 
       @online       = true
@@ -39,7 +37,6 @@ module Wordstress
 
       @plugins      = find_plugins
       @themes       = find_themes
-      # @themes_vuln_json = get_themes_vulnerabilities
     end
 
     def get_themes_vulnerabilities
@@ -52,24 +49,25 @@ module Wordstress
     def get_plugin_vulnerabilities(theme)
       begin
         json= get_https("https://wpvulndb.com/api/v1/plugins/#{theme}").body
-        return "Plugin #{theme} is not present on wpvulndb.com" if json.include?"The page you were looking for doesn't exist (404)"
-        return json
+        return JSON.parse("{}") if json.include?"The page you were looking for doesn't exist (404)"
+        return JSON.parse(json)
       rescue => e
         $logger.err e.message
         @online = false
-        return []
+        return JSON.parse("{}")
       end
     end
 
     def get_theme_vulnerabilities(theme)
       begin
         json=get_https("https://wpvulndb.com/api/v1/themes/#{theme}").body
-        return "Theme #{theme} is not present on wpvulndb.com" if json.include?"The page you were looking for doesn't exist (404)"
-        return json
+        return JSON.parse("{}") if json.include?"The page you were looking for doesn't exist (404)"
+        return {}.to_json if json.include?"The page you were looking for doesn't exist (404)"
+        return JSON.parse(json)
       rescue => e
         $logger.err e.message
         @online = false
-        return []
+        return JSON.parse("{}")
       end
     end
 
@@ -90,7 +88,44 @@ module Wordstress
       return version.gsub('.', '')+'0'  if version.split('.').count == 2
     end
 
-    def detect_version(page)
+    def detect_version(page, whitebox=false)
+      detect_version_blackbox(page) unless whitebox
+      detect_version_whitebox(page) if whitebox
+    end
+
+    # FIXME: this routine will change. 
+    # For plugin 0.6, blog version will be available in the wordstress page
+    # with the function get_bloginfo
+    # (http://codex.wordpress.org/Function_Reference/get_bloginfo)
+    #
+    def detect_version_whitebox(page)
+
+      v_meta = ""
+      doc = Nokogiri::HTML(page.body)
+      doc.xpath("//meta[@name='generator']/@content").each do |attr|
+        v_meta = attr.value.split(' ')[1]
+      end
+
+      v_rss = ""
+      rss_doc = Nokogiri::HTML(page.body)
+      begin
+        rss = Nokogiri::HTML(get(rss_doc.css('link[type="application/rss+xml"]').first.attr('href')).body) unless l.nil?
+        v_rss= rss.css('generator').text.split('=')[1]
+      rescue => e
+        v_rss = "0.0.0"
+      end
+
+
+      return {:version => v_meta, :accuracy => 1.0} if v_meta == v_rss
+      return {:version => v_meta, :accuracy => 0.4} if v_meta != v_rss
+
+      # we failed detecting wordpress version
+      return {:version => "0.0.0", :accuracy => 0}
+
+
+    end
+
+    def detect_version_blackbox(page)
 
       #
       # 1. trying to detect wordpress version from homepage body meta generator
@@ -105,11 +140,18 @@ module Wordstress
       #
       # 2. trying to detect wordpress version from readme.html in the root
       # directory
+      #
+      # Not available if scanning 
 
-      v_readme = ""
-      doc = Nokogiri::HTML(@readme_html.body)
-      v_readme = doc.at_css('h1').children.last.text.chop.lstrip.split(' ')[1]
+      unless whitebox
+        v_readme = ""
+        doc = Nokogiri::HTML(@readme_html.body)
+        v_readme = doc.at_css('h1').children.last.text.chop.lstrip.split(' ')[1]
+      end
 
+      #
+      # 3. Detect from RSS link
+      #
       v_rss = ""
       rss_doc = Nokogiri::HTML(page.body)
       begin
@@ -167,9 +209,8 @@ module Wordstress
       doc = Nokogiri::HTML(@wordstress_page.body)
       doc.css('#all_plugin').each do |link|
         l=link.text.split(',')
-        ret << {:name=>l[2], :version=>l[1], :status=>l[3]} unless is_already_detected?(ret, l[2])
+        ret << {:name=>l[2].split('/')[0], :version=>l[1], :status=>l[3]} unless is_already_detected?(ret, l[2])
       end
-      $logger.debug ret
       ret
     end
     def find_themes_whitebox
@@ -177,9 +218,8 @@ module Wordstress
       doc = Nokogiri::HTML(@wordstress_page.body)
       doc.css('#all_theme').each do |link|
         l=link.text.split(',')
-        ret << {:name=>l[2], :version=>l[1]} unless is_already_detected?(ret, l[2])
+        ret << {:name=>l[2], :version=>l[1], :status=>l[3]} unless is_already_detected?(ret, l[2])
       end
-      $logger.debug ret
       ret
     end
 
@@ -224,23 +264,34 @@ module Wordstress
       ret
     end
 
-    def get_http(page)
-      $logger.ok page
-      uri = URI.parse(page)
-      http = Net::HTTP.new(uri.host, uri.port)
-      request = Net::HTTP::Get.new(uri.request_uri)
-      request.basic_auth @basic_auth_user, @basic_auth_pwd unless @basic_auth_user == ""
+    def get_http(page, use_ssl=false)
+      uri = URI(page)
+      req = Net::HTTP::Get.new(uri)
+      req.basic_auth @basic_auth_user, @basic_auth_pwd unless @basic_auth_user == ""
 
-      return http.request(request)
+
+      http = Net::HTTP.new(uri.hostname, uri.port)
+      http.use_ssl = use_ssl
+
+      res = http.start {|h|
+        h.request(req)
+      }
+      case res
+      when Net::HTTPSuccess then
+        return res
+      when Net::HTTPRedirection then
+        location = res['location']
+        $logger.warn "redirected to #{location}"
+        get_http(location)
+      when Net::HTTPNotFound
+        return res
+      else
+        return res.value
+      end
     end
-    def get_https(page)
-      uri = URI.parse(page)
-      http = Net::HTTP.new(uri.host, uri.port)
-      http.use_ssl = true
-      request = Net::HTTP::Get.new(uri.request_uri)
-      request.basic_auth @basic_auth_user, @basic_auth_pwd unless @basic_auth_user == ""
-      return http.request(request)
 
+    def get_https(page)
+      get_http(page, true)
     end
   end
 end

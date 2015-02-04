@@ -5,7 +5,7 @@ module Wordstress
 
     attr_reader :version, :scanning_mode, :wp_vuln_json, :plugins, :themes, :themes_vuln_json
 
-    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman, :interactive=>{}})
+    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman, :whitebox=>{}})
       begin
         @uri      = URI(options[:target])
         @raw_name = options[:target]
@@ -14,18 +14,25 @@ module Wordstress
         @valid = false
       end
       @scanning_mode = options[:scanning_mode]
-
       @robots_txt   = get(@raw_name + "/robots.txt")
       @readme_html  = get(@raw_name + "/readme.html")
-      @homepage     = get(@raw_name)
-      @version      = detect_version
+
+      unless scanning_mode == :whitebox
+
+        @homepage     = get(@raw_name)
+        @version      = detect_version(@homepage)
+      else
+        @wordstress_page = get("#{options[:whitebox][:url]}?wordstress-key=#{options[:whitebox][:key]}") if options[:scanning_mode] == :whitebox
+        @version      = detect_version(@wordstress_page)
+        $logger.debug "#{options[:whitebox][:url]}?wordstress-key=#{options[:whitebox][:key]}"
+        $logger.debug @wordstress_page.body
+      end
+
       @online       = true
 
       @wp_vuln_json = get_wp_vulnerabilities  unless @version[:version] == "0.0.0"
       @wp_vuln_json = Hash.new.to_json        if @version[:version] == "0.0.0"
 
-      @wordstress_page = post_and_get(options[:interactive][:url], options[:interactive][:pwd]) if options[:scanning_mode] == :interactive && !options[:interactive][:pwd].empty?
-      @wordstress_page = get(options[:interactive][:url]) if options[:scanning_mode] == :interactive && options[:interactive][:pwd].empty?
       @plugins      = find_plugins
       @themes       = find_themes
       # @themes_vuln_json = get_themes_vulnerabilities
@@ -79,14 +86,14 @@ module Wordstress
       return version.gsub('.', '')+'0'  if version.split('.').count == 2
     end
 
-    def detect_version
+    def detect_version(page)
 
       #
       # 1. trying to detect wordpress version from homepage body meta generator
       # tag
 
       v_meta = ""
-      doc = Nokogiri::HTML(@homepage.body)
+      doc = Nokogiri::HTML(page.body)
       doc.xpath("//meta[@name='generator']/@content").each do |attr|
         v_meta = attr.value.split(' ')[1]
       end
@@ -100,7 +107,7 @@ module Wordstress
       v_readme = doc.at_css('h1').children.last.text.chop.lstrip.split(' ')[1]
 
       v_rss = ""
-      rss_doc = Nokogiri::HTML(@homepage.body)
+      rss_doc = Nokogiri::HTML(page.body)
       begin
         rss = Nokogiri::HTML(get(rss_doc.css('link[type="application/rss+xml"]').first.attr('href')).body) unless l.nil?
         v_rss= rss.css('generator').text.split('=')[1]
@@ -130,25 +137,18 @@ module Wordstress
 
     def find_themes
       return find_themes_gentleman  if @scanning_mode == :gentleman
-      return find_themes_interactive if @scanning_mode == :interactive
+      return find_themes_whitebox if @scanning_mode == :whitebox
       return []
     end
     def find_plugins
       return find_plugins_gentleman if @scanning_mode == :gentleman
-      return find_plugins_interactive if @scanning_mode == :interactive
+      return find_plugins_whitebox if @scanning_mode == :whitebox
 
       # bruteforce check must start with error page discovery.
       # the idea is to send 2 random plugin names (e.g. 2 sha256 of time seed)
       # and see how webserver answers and then understand if we can rely on a
       # pattern for the error page.
       return []
-    end
-
-    def post_and_get(url, pass)
-      uri = URI(url)
-      res = Net::HTTP.post_form(uri, {'post_password' => pass, 'Submit'=>'Submit'})
-      get(url)
-      res.body
     end
 
     private
@@ -158,7 +158,7 @@ module Wordstress
       return (!a.nil?)
     end
 
-    def find_plugins_interactive
+    def find_plugins_whitebox
       ret = []
       doc = Nokogiri::HTML(@wordstress_page.body)
       doc.css('#all_plugin').each do |link|
@@ -168,7 +168,7 @@ module Wordstress
       $logger.debug ret
       ret
     end
-    def find_themes_interactive
+    def find_themes_whitebox
       ret = []
       doc = Nokogiri::HTML(@wordstress_page.body)
       doc.css('#all_theme').each do |link|
@@ -221,6 +221,7 @@ module Wordstress
     end
 
     def get_http(page)
+      $logger.ok page
       uri = URI.parse(page)
       http = Net::HTTP.new(uri.host, uri.port)
       request = Net::HTTP::Get.new(uri.request_uri)

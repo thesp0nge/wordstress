@@ -1,5 +1,3 @@
-require 'URI'
-
 module Wordstress
   class Utils
 

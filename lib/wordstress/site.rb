@@ -1,11 +1,14 @@
 require 'net/http'
+require 'terminal-table'
 
 module Wordstress
   class Site
 
-    attr_reader :version, :scanning_mode, :wp_vuln_json, :plugins, :themes, :themes_vuln_json
+    attr_reader :version, :scanning_mode, :wp_vuln, :plugins, :themes
+    attr_accessor :theme_vulns, :plugin_vulns, :online
 
-    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman, :whitebox=>{}, :basic_auth=>{:user=>"", :pwd=>""}})
+    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman, :whitebox=>{}, :basic_auth=>{:user=>"", :pwd=>""}, :output_dir=>"./"})
+      @target     = options[:target]
       begin
         @uri      = URI(options[:target])
         @raw_name = options[:target]
@@ -13,11 +16,14 @@ module Wordstress
       rescue
         @valid = false
       end
-      @scanning_mode = options[:scanning_mode]
+      @scanning_mode    = options[:scanning_mode]
 
-      @basic_auth_user = options[:basic_auth][:user]
-      @basic_auth_pwd = options[:basic_auth][:pwd]
+      @basic_auth_user  = options[:basic_auth][:user]
+      @basic_auth_pwd   = options[:basic_auth][:pwd]
+      @output_dir       = options[:output_dir]
 
+      @start_time       = Time.now
+      @end_time         = Time.now # I hate init variables to nil...
 
       unless scanning_mode == :whitebox
 
@@ -26,30 +32,29 @@ module Wordstress
         @homepage     = get(@raw_name)
         @version      = detect_version(@homepage, false)
       else
-        @wordstress_page = get("#{options[:whitebox][:url]}?wordstress-key=#{options[:whitebox][:key]}") if options[:scanning_mode] == :whitebox
-        @version      = detect_version(@wordstress_page, true)
+        @wordstress_page  = get("#{options[:whitebox][:url]}?wordstress-key=#{options[:whitebox][:key]}") if options[:scanning_mode] == :whitebox
+        @version          = detect_version(@wordstress_page, true)
       end
 
       @online       = true
 
-      @wp_vuln_json = get_wp_vulnerabilities  unless @version[:version] == "0.0.0"
-      @wp_vuln_json = Hash.new.to_json        if @version[:version] == "0.0.0"
+      @wp_vuln = get_wp_vulnerabilities  unless @version[:version] == "0.0.0"
+      @wp_vuln = JSON.parse("{}")        if @version[:version] == "0.0.0"
 
       @plugins      = find_plugins
       @themes       = find_themes
+      @theme_vulns  = []
+      @plugin_vulns = []
     end
 
-    def get_themes_vulnerabilities
-      vuln = []
-      @themes.each do |t|
-        vuln << {:theme=>t, :vulns=>get_theme_vulnerabilities(t)}
-      end
+    def stop_scan
+      @end_time = Time.now
     end
 
     def get_plugin_vulnerabilities(theme)
       begin
         json= get_https("https://wpvulndb.com/api/v1/plugins/#{theme}").body
-        return JSON.parse("{}") if json.include?"The page you were looking for doesn't exist (404)"
+        return JSON.parse("{\"plugin\":{\"vulnerabilities\":[]}}") if json.include?"The page you were looking for doesn't exist (404)"
         return JSON.parse(json)
       rescue => e
         $logger.err e.message
@@ -61,8 +66,7 @@ module Wordstress
     def get_theme_vulnerabilities(theme)
       begin
         json=get_https("https://wpvulndb.com/api/v1/themes/#{theme}").body
-        return JSON.parse("{}") if json.include?"The page you were looking for doesn't exist (404)"
-        return {}.to_json if json.include?"The page you were looking for doesn't exist (404)"
+        return JSON.parse("{\"theme\":{\"vulnerabilities\":[]}}") if json.include?"The page you were looking for doesn't exist (404)"
         return JSON.parse(json)
       rescue => e
         $logger.err e.message
@@ -73,19 +77,19 @@ module Wordstress
 
     def get_wp_vulnerabilities
       begin
-        return get_https("https://wpvulndb.com/api/v1/wordpresses/#{version_pad(@version[:version])}").body
+        page= get_https("https://wpvulndb.com/api/v1/wordpresses/#{version_pad(@version[:version])}")
+        return JSON.parse(page.body) unless page.class == Net::HTTPNotFound
+        return JSON.parse("{\"wordpress\":{\"vulnerabilities\":[]}}") if page.class == Net::HTTPNotFound
       rescue => e
         $logger.err e.message
         @online = false
-        return ""
+        return JSON.parse("{}")
       end
     end
 
     def version_pad(version)
-      # 3.2.1 => 321
-      # 4.0 => 400
-      return version.gsub('.', '')      if version.split('.').count == 3
-      return version.gsub('.', '')+'0'  if version.split('.').count == 2
+      return version.gsub('.', '')      #if version.split('.').count == 3
+      # return version.gsub('.', '')+'0'  if version.split('.').count == 2
     end
 
     def detect_version(page, whitebox=false)
@@ -93,36 +97,14 @@ module Wordstress
       detect_version_whitebox(page) if whitebox
     end
 
-    # FIXME: this routine will change. 
-    # For plugin 0.6, blog version will be available in the wordstress page
-    # with the function get_bloginfo
-    # (http://codex.wordpress.org/Function_Reference/get_bloginfo)
-    #
     def detect_version_whitebox(page)
-
-      v_meta = ""
+      v_meta = '0.0.0'
       doc = Nokogiri::HTML(page.body)
-      doc.xpath("//meta[@name='generator']/@content").each do |attr|
-        v_meta = attr.value.split(' ')[1]
+      doc.css('#wp_version').each do |link|
+        v_meta = link.text
       end
 
-      v_rss = ""
-      rss_doc = Nokogiri::HTML(page.body)
-      begin
-        rss = Nokogiri::HTML(get(rss_doc.css('link[type="application/rss+xml"]').first.attr('href')).body) unless l.nil?
-        v_rss= rss.css('generator').text.split('=')[1]
-      rescue => e
-        v_rss = "0.0.0"
-      end
-
-
-      return {:version => v_meta, :accuracy => 1.0} if v_meta == v_rss
-      return {:version => v_meta, :accuracy => 0.4} if v_meta != v_rss
-
-      # we failed detecting wordpress version
-      return {:version => "0.0.0", :accuracy => 0}
-
-
+      return {:version => v_meta, :accuracy => 1.0}
     end
 
     def detect_version_blackbox(page)
@@ -195,6 +177,91 @@ module Wordstress
       # and see how webserver answers and then understand if we can rely on a
       # pattern for the error page.
       return []
+    end
+
+    def ascii_report
+      # 0_Executive summary
+      rows = []
+      rows << ['Wordstress version', Wordstress::VERSION]
+      rows << ['Scan started',@start_time]
+      rows << ['Scan duration', "#{(@end_time - @start_time).round(3)} sec"]
+      rows << ['Target', @target]
+      rows << ['Wordpress version', version[:version]]
+      unless @online
+        rows << ['Scan status', 'During scan wordstress went offline. Results are incomplete / unreliable. Please make sure you are connected to the Internet']
+      else
+        rows << ['Scan status', 'Scan completed successfully']
+      end
+      table = Terminal::Table.new :title=>'Scan summary', :rows => rows
+      puts table
+
+      return table unless @online
+      # 1_vulnerability summary
+      rows = []
+      rows << ['Wordpress version', @wp_vuln["wordpress"]["vulnerabilities"].count]
+      rows << ['Plugins installed', @plugin_vulns.count]
+      rows << ['Themes installed', @theme_vulns.count]
+
+      table = Terminal::Table.new :title=>'Vulnerabilities found', :rows => rows
+      puts table
+
+      # 2_vulnerabilities detail
+
+      if @wp_vuln["wordpress"]["vulnerabilities"].count != 0
+
+        rows = []
+        @wp_vuln["wordpress"]["vulnerabilities"].each do |v|
+          rows << [v[:title], v[:cve], v[:url], v[:fixed_in]]
+          rows << :separator
+        end
+        table = Terminal::Table.new :title=>"Vulnerabilities in Wordpress version #{version[:version]}", :headings=>['Issue', 'CVE', 'Url', 'Fixed in version'], :rows=>rows
+        puts table
+      end
+
+      if @plugin_vulns.count != 0
+        rows = []
+        @plugin_vulns.each do |v|
+          rows << [v[:title], v[:cve], v[:detected], v[:fixed_in]]
+          rows << :separator
+        end
+        table = Terminal::Table.new :title=>"Vulnerabilities in installed plugins", :headings=>['Issue', 'CVE', 'Detected version', 'Fixed version'], :rows=>rows
+        puts table
+      end
+
+      if @theme_vulns.count != 0
+
+        rows = []
+        @theme_vulns.each do |v|
+          rows << [v[:title], v[:cve], v[:detected], v[:fixed_in]]
+          rows << :separator
+        end
+        table = Terminal::Table.new :title=>"Vulnerabilities in installed themes", :headings=>['Issue', 'CVE', 'Detected version', 'Fixed in version'], :rows=>rows
+        puts table
+      end
+
+
+
+
+
+      # File.open(File.join(@output_dir, "report.txt"), 'w') do |file|
+
+      # file.puts("target: #{@target}")
+      # file.puts("wordpress version: #{version[:version]}")
+      # file.puts("themes found: #{@themes.count}")
+        # file.puts("plugins found: #{@plugins.count}")
+        # file.puts("Vulnerabilities in wordpress")
+        # @wp_vuln["wordpress"]["vulnerabilities"].each do |v|
+          # file.puts "#{v[:title]} - fixed in #{v[:fixed_in]}"
+        # end
+        # file.puts("Vulnerabilities in themes")
+        # @theme_vulns.each do |v|
+          # file.puts "#{v[:title]} - fixed in #{v[:fixed_in]}"
+        # end
+        # file.puts("Vulnerabilities in plugins")
+        # @plugins_vulns.each do |v|
+          # file.puts "#{v[:title]} - fixed in #{v[:fixed_in]}"
+        # end
+      # end
     end
 
     private
@@ -281,7 +348,7 @@ module Wordstress
         return res
       when Net::HTTPRedirection then
         location = res['location']
-        $logger.warn "redirected to #{location}"
+        $logger.debug "redirected to #{location}"
         get_http(location)
       when Net::HTTPNotFound
         return res

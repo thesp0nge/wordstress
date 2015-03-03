@@ -9,11 +9,12 @@ module Wordstress
 
     def initialize(options={:whitebox=>{:url=>"http://localhost/wordstress", :key=>""}, :basic_auth=>{:user=>"", :pwd=>""}, :output_dir=>"./"})
       begin
-        @uri      = URI(options[:whitebox[:url]])
+        @uri      = URI(options[:whitebox][:url])
         @valid    = true
       rescue
         @valid = false
       end
+      @target = Wordstress::Utils.url_to_target(options[:whitebox][:url])
 
       @basic_auth_user  = options[:basic_auth][:user]
       @basic_auth_pwd   = options[:basic_auth][:pwd]
@@ -92,6 +93,7 @@ module Wordstress
     end
 
     def get(page)
+      $logger.debug page
       return get_http(page)   if @uri.scheme == "http"
       return get_https(page)  if @uri.scheme == "https"
     end

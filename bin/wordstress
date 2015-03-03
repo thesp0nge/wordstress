@@ -65,8 +65,8 @@ $logger.helo APPNAME, Wordstress::VERSION
 $logger.warn "-G, -W, -u flags are deprecated and they will be soon removed. whitebox scanning will be the only supported option" if deprecation_warning
 
 if whitebox[:url].empty?
-  $logger.warn "assuming wordstress virtual page to be found at #{ARGV.shift}/wordstress"
-  whitebox[:url]=ARGV.shift+"/wordstress"
+  whitebox[:url]="#{ARGV.shift}/wordstress"
+  $logger.warn "assuming wordstress virtual page to be found at #{whitebox[:url]}"
 end
 
 unless Dir.exists?(@output_root)
@@ -88,7 +88,7 @@ if site.version[:version] == "0.0.0"
   Kernel.exit(-2)
 end
 
-$logger.ok "#{target} is a wordpress version #{site.version[:version]} with #{site.themes.count} themes and #{site.plugins.count} plugins"
+$logger.ok "#{Wordstress::Utils.url_to_target(whitebox[:url])} is a wordpress version #{site.version[:version]} with #{site.themes.count} themes and #{site.plugins.count} plugins"
 
 if site.online?
   site.wp_vuln["wordpress"]["vulnerabilities"].each do |v|

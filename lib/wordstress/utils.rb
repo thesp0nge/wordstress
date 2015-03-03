@@ -1,6 +1,11 @@
 module Wordstress
   class Utils
 
+    def self.url_to_target(url)
+      uri = URI.parse(url)
+      "#{uri.scheme}://#{uri.host}#{uri.request_uri.gsub("/wordstress", "")}" if uri.port == 80
+      "#{uri.scheme}://#{uri.host}:#{uri.port}#{uri.request_uri.gsub("/wordstress", "")}" unless uri.port == 80
+    end
     # Transform a given URL into a directory name to be used to store data
     def self.target_to_dirname(target)
       uri = URI.parse(target)

@@ -7,15 +7,8 @@ require 'codesake-commons'
 
 require 'wordstress'
 
-# Scanning modes for plugins and themes
-#   + gentleman: wordstress will try to fetch plugins and themes only using
-#     info in the HTML page (this is very polite but also very inaccurate).
-#   + whitebox: wordstress will use a target installed plugin to fetch
-#     installed plugins and themes with their version
-#   + aggressive: wordstress will use enumeration to find installed plugins and
-#     themes. This will lead to false positives.
-MODES = [:gentleman,:whitebox,:aggressive]
 APPNAME = File.basename($0)
+trap("INT")   { $logger.die('[INTERRUPTED]') }
 
 $logger  = Codesake::Commons::Logging.instance
 $logger.debug = false
@@ -39,6 +32,7 @@ opts    = GetoptLong.new(
 )
 
 opts.quiet=true
+deprecation_warning = false
 
 begin
   opts.each do |opt, val|
@@ -47,7 +41,7 @@ begin
       basic_auth[:user] = val.split(':')[0]
       basic_auth[:pwd] = val.split(':')[1]
     when '--whitebox'
-      scanning_mode = :whitebox
+      deprecation_warning = true
     when '--wordstress-url'
       whitebox[:url] = val
     when '--wordstress-api-key'
@@ -67,26 +61,27 @@ rescue GetoptLong::InvalidOption => e
   Kernel.exit(-1)
 end
 
-target=ARGV.shift unless scanning_mode == :whitebox
-target=whitebox[:url] if scanning_mode == :whitebox
-
-
 $logger.helo APPNAME, Wordstress::VERSION
+$logger.warn "-G, -W, -u flags are deprecated and they will be soon removed. whitebox scanning will be the only supported option" if deprecation_warning
+
+if whitebox[:url].empty?
+  $logger.warn "assuming wordstress virtual page to be found at #{ARGV.shift}/wordstress"
+  whitebox[:url]=ARGV.shift+"/wordstress"
+end
 
 unless Dir.exists?(@output_root)
   $logger.log "creating output dir #{@output_root}"
   Dir.mkdir @output_root
 end
 
-@output_dir = Wordstress::Utils.build_output_dir(@output_root, target)
+@output_dir = Wordstress::Utils.build_output_dir(@output_root, whitebox[:url])
 $logger.log "storing results to #{@output_dir}"
 FileUtils::mkdir_p(@output_dir)
 
-trap("INT")   { $logger.die('[INTERRUPTED]') }
-$logger.die("missing target") if target.nil?
+$logger.die("missing target") if whitebox[:url].nil?
 
-$logger.log "scanning #{target}"
-site = Wordstress::Site.new({:target=>target, :scanning_mode=>scanning_mode, :whitebox=>whitebox,:basic_auth=>basic_auth, :output_dir=>@output_dir})
+$logger.log "scanning #{whitebox[:url]}"
+site = Wordstress::Site.new({:whitebox=>whitebox,:basic_auth=>basic_auth, :output_dir=>@output_dir})
 
 if site.version[:version] == "0.0.0"
   $logger.err "can't detect wordpress version running on #{target}. Giving up!"
@@ -94,7 +89,6 @@ if site.version[:version] == "0.0.0"
 end
 
 $logger.ok "#{target} is a wordpress version #{site.version[:version]} with #{site.themes.count} themes and #{site.plugins.count} plugins"
-$logger.warn "scan mode is set to 'gentleman'. We are using only information found on resulting HTML. This can be lead to undetected plugins or themes" if site.scanning_mode == :gentleman
 
 if site.online?
   site.wp_vuln["wordpress"]["vulnerabilities"].each do |v|

@@ -4,19 +4,16 @@ require 'terminal-table'
 module Wordstress
   class Site
 
-    attr_reader :version, :scanning_mode, :wp_vuln, :plugins, :themes
+    attr_reader :version, :wp_vuln, :plugins, :themes
     attr_accessor :theme_vulns, :plugin_vulns, :online
 
-    def initialize(options={:target=>"http://localhost", :scanning_mode=>:gentleman, :whitebox=>{}, :basic_auth=>{:user=>"", :pwd=>""}, :output_dir=>"./"})
-      @target     = options[:target]
+    def initialize(options={:whitebox=>{:url=>"http://localhost/wordstress", :key=>""}, :basic_auth=>{:user=>"", :pwd=>""}, :output_dir=>"./"})
       begin
-        @uri      = URI(options[:target])
-        @raw_name = options[:target]
+        @uri      = URI(options[:whitebox[:url]])
         @valid    = true
       rescue
         @valid = false
       end
-      @scanning_mode    = options[:scanning_mode]
 
       @basic_auth_user  = options[:basic_auth][:user]
       @basic_auth_pwd   = options[:basic_auth][:pwd]
@@ -25,16 +22,8 @@ module Wordstress
       @start_time       = Time.now
       @end_time         = Time.now # I hate init variables to nil...
 
-      unless scanning_mode == :whitebox
-
-        @robots_txt   = get(@raw_name + "/robots.txt")
-        @readme_html  = get(@raw_name + "/readme.html")
-        @homepage     = get(@raw_name)
-        @version      = detect_version(@homepage, false)
-      else
-        @wordstress_page  = get("#{options[:whitebox][:url]}?wordstress-key=#{options[:whitebox][:key]}") if options[:scanning_mode] == :whitebox
-        @version          = detect_version(@wordstress_page, true)
-      end
+      @wordstress_page  = get("#{options[:whitebox][:url]}?wordstress-key=#{options[:whitebox][:key]}")
+      @version          = detect_version(@wordstress_page)
 
       @online       = true
 
@@ -92,12 +81,7 @@ module Wordstress
       # return version.gsub('.', '')+'0'  if version.split('.').count == 2
     end
 
-    def detect_version(page, whitebox=false)
-      detect_version_blackbox(page) unless whitebox
-      detect_version_whitebox(page) if whitebox
-    end
-
-    def detect_version_whitebox(page)
+    def detect_version(page)
       v_meta = '0.0.0'
       doc = Nokogiri::HTML(page.body)
       doc.css('#wp_version').each do |link|
@@ -105,50 +89,6 @@ module Wordstress
       end
 
       return {:version => v_meta, :accuracy => 1.0}
-    end
-
-    def detect_version_blackbox(page)
-
-      #
-      # 1. trying to detect wordpress version from homepage body meta generator
-      # tag
-
-      v_meta = ""
-      doc = Nokogiri::HTML(page.body)
-      doc.xpath("//meta[@name='generator']/@content").each do |attr|
-        v_meta = attr.value.split(' ')[1]
-      end
-
-      #
-      # 2. trying to detect wordpress version from readme.html in the root
-      # directory
-      #
-      # Not available if scanning 
-
-      unless whitebox
-        v_readme = ""
-        doc = Nokogiri::HTML(@readme_html.body)
-        v_readme = doc.at_css('h1').children.last.text.chop.lstrip.split(' ')[1]
-      end
-
-      #
-      # 3. Detect from RSS link
-      #
-      v_rss = ""
-      rss_doc = Nokogiri::HTML(page.body)
-      begin
-        rss = Nokogiri::HTML(get(rss_doc.css('link[type="application/rss+xml"]').first.attr('href')).body) unless l.nil?
-        v_rss= rss.css('generator').text.split('=')[1]
-      rescue => e
-        v_rss = "0.0.0"
-      end
-
-
-      return {:version => v_meta, :accuracy => 1.0} if v_meta == v_readme && v_meta == v_rss
-      return {:version => v_meta, :accuracy => 0.8} if v_meta == v_readme || v_meta == v_rss
-
-      # we failed detecting wordpress version
-      return {:version => "0.0.0", :accuracy => 0}
     end
 
     def get(page)
@@ -163,21 +103,25 @@ module Wordstress
       return @online
     end
 
-    def find_themes
-      return find_themes_gentleman  if @scanning_mode == :gentleman
-      return find_themes_whitebox if @scanning_mode == :whitebox
-      return []
-    end
     def find_plugins
-      return find_plugins_gentleman if @scanning_mode == :gentleman
-      return find_plugins_whitebox if @scanning_mode == :whitebox
-
-      # bruteforce check must start with error page discovery.
-      # the idea is to send 2 random plugin names (e.g. 2 sha256 of time seed)
-      # and see how webserver answers and then understand if we can rely on a
-      # pattern for the error page.
-      return []
+      ret = []
+      doc = Nokogiri::HTML(@wordstress_page.body)
+      doc.css('#all_plugin').each do |link|
+        l=link.text.split(',')
+        ret << {:name=>l[2].split('/')[0], :version=>l[1], :status=>l[3]} unless is_already_detected?(ret, l[2])
+      end
+      ret
     end
+    def find_themes
+      ret = []
+      doc = Nokogiri::HTML(@wordstress_page.body)
+      doc.css('#all_theme').each do |link|
+        l=link.text.split(',')
+        ret << {:name=>l[2], :version=>l[1], :status=>l[3]} unless is_already_detected?(ret, l[2])
+      end
+      ret
+    end
+
 
     def ascii_report
       # 0_Executive summary
@@ -271,24 +215,6 @@ module Wordstress
       return (!a.nil?)
     end
 
-    def find_plugins_whitebox
-      ret = []
-      doc = Nokogiri::HTML(@wordstress_page.body)
-      doc.css('#all_plugin').each do |link|
-        l=link.text.split(',')
-        ret << {:name=>l[2].split('/')[0], :version=>l[1], :status=>l[3]} unless is_already_detected?(ret, l[2])
-      end
-      ret
-    end
-    def find_themes_whitebox
-      ret = []
-      doc = Nokogiri::HTML(@wordstress_page.body)
-      doc.css('#all_theme').each do |link|
-        l=link.text.split(',')
-        ret << {:name=>l[2], :version=>l[1], :status=>l[3]} unless is_already_detected?(ret, l[2])
-      end
-      ret
-    end
 
     def find_themes_gentleman
       ret = []

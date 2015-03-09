@@ -12,10 +12,8 @@ trap("INT")   { $logger.die('[INTERRUPTED]') }
 
 $logger  = Codesake::Commons::Logging.instance
 $logger.debug = false
-# $logger.toggle_silence
-@output_root = File.join(Dir.home, '/wordstress')
+@output_root = File.join(Dir.home, 'wordstress')
 
-scanning_mode = :whitebox
 whitebox      = {:url=>"", :key=>""}
 basic_auth    = {:user=>"", :pwd=>""}
 
@@ -29,7 +27,7 @@ opts    = GetoptLong.new(
   [ '--fetch-all-themes-vulns', '-T',   GetoptLong::NO_ARGUMENT],
   [ '--fetch-all-plugins-vulns','-P',   GetoptLong::NO_ARGUMENT],
   [ '--basic-auth',             '-B',   GetoptLong::REQUIRED_ARGUMENT],
-  [ '--wordstress-api-key',     '-k',   GetoptLong::REQUIRED_ARGUMENT],
+  [ '--key',                    '-k',   GetoptLong::REQUIRED_ARGUMENT],
   [ '--csv',                    '-C',   GetoptLong::NO_ARGUMENT],
   [ '--debug',                  '-D',   GetoptLong::NO_ARGUMENT],
   [ '--version',                '-v',   GetoptLong::NO_ARGUMENT],
@@ -50,7 +48,7 @@ begin
     when '--wordstress-url'
       deprecation_warning = true
       whitebox[:url] = val
-    when '--wordstress-api-key'
+    when '--key'
       whitebox[:key] = val
     when '--version'
       puts "#{Wordstress::VERSION}"
@@ -58,6 +56,7 @@ begin
     when '--debug'
       $logger.debug = true
     when '--help'
+      Wordstress::Utils.help
       Kernel.exit(0)
     end
   end

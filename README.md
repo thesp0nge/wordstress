@@ -1,8 +1,7 @@
 # Wordstress
 
-wordstress is a application security tool specific for wordpress powered
-websites, inspired by [wpscan](https://github.com/wpscanteam/wpscan) tool.
-
+wordstress is an opensource whitebox security scanner for wordpress powered
+websites.
 
 ## Description
 

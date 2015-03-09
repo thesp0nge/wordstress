@@ -93,7 +93,6 @@ module Wordstress
     end
 
     def get(page)
-      $logger.debug page
       return get_http(page)   if @uri.scheme == "http"
       return get_https(page)  if @uri.scheme == "https"
     end
@@ -218,45 +217,11 @@ module Wordstress
     end
 
 
-    def find_themes_gentleman
-      ret = []
-      doc = Nokogiri::HTML(@homepage.body)
-      doc.css('link').each do |link|
-        if link.attr('href').include?("wp-content/themes")
-        theme = theme_name(link.attr('href'))
-        ret << {:name=>theme, :version=>""} unless is_already_detected?(ret, theme)
-        end
-      end
-      ret
-    end
-
     def theme_name(url)
       url.match(/\/wp-content\/themes\/(\w)+/)[0].split('/').last
     end
     def plugin_name(url)
       url.match(/\/wp-content\/plugins\/(\w)+/)[0].split('/').last
-    end
-
-    def find_plugins_gentleman
-      ret = []
-      doc = Nokogiri::HTML(@homepage.body)
-      doc.css('script').each do |link|
-        if ! link.attr('src').nil?
-          if link.attr('src').include?("wp-content/plugins")
-          plugin = plugin_name(link.attr('src'))
-          ret << {:name=>plugin, :version=>"", :status=>"active"} unless is_already_detected?(ret, plugin)
-          end
-        end
-      end
-      doc.css('link').each do |link|
-        if link.attr('href').include?("wp-content/plugins")
-        plugin = plugin_name(link.attr('href'))
-        ret << plugin if ret.index(plugin).nil?
-        end
-
-      end
-
-      ret
     end
 
     def get_http(page, use_ssl=false)

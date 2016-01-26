@@ -58,7 +58,7 @@ module Wordstress
         return JSON.parse(json)
       rescue => e
         $logger.err e.message
-        @online = false
+        @online = false unless e.message.include?"403"
         return JSON.parse("{}")
       end
     end
@@ -70,7 +70,7 @@ module Wordstress
         return JSON.parse(json)
       rescue => e
         $logger.err e.message
-        @online = false
+        @online = false unless e.message.include?"403"
         return JSON.parse("{}")
       end
     end
@@ -82,7 +82,7 @@ module Wordstress
         return JSON.parse("{\"wordpress\":{\"vulnerabilities\":[]}}") if page.class == Net::HTTPNotFound
       rescue => e
         $logger.err e.message
-        @online = false
+        @online = false unless e.message.include?"403"
         return JSON.parse("{}")
       end
     end

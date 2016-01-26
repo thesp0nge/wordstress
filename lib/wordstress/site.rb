@@ -349,7 +349,7 @@ module Wordstress
       when Net::HTTPRedirection then
         location = res['location']
         $logger.debug "redirected to #{location}"
-        get_http(location)
+        get_http(location, use_ssl)
       when Net::HTTPNotFound
         return res
       else

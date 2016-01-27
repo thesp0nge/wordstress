@@ -64,8 +64,8 @@ wordpress](https://wordpress.org/plugins/wordstress/) you may must:
   generated, to increase entropy you may want to reload the page a couple of
   times. When you're comfortable with the generated key, press the "Save Changes"
   button.
-  The virtual page is now available at the url http://youblogurl/wordstress?worstress-key=the_key
-* from the command line, use wordstress security scanner this way: `worstress -u http://yourblogurl/wordstress -k the_key`
+  The virtual page is now available at the url http://youblogurl/wordstress?wordstress-key=the_key
+* from the command line, use wordstress security scanner this way: `wordstress -u http://yourblogurl/wordstress -k the_key`
 * enjoy results
 
 ## Why another tool?

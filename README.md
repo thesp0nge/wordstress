@@ -92,6 +92,40 @@ themes and plugins and their version. Since an authenticated check is necessary
 to match scan results with installed plugin (or theme) version, I tought it was
 a better idea to start authenticated from the beginning.
 
+## Usage
+
+Using wordstress from command line is pretty easy. There are 2 mandatory
+arguments, the key to use to query the wordpress plugin and the target url.
+
+`$ wordstress -k d4a34e43b5d74c822830b5c4690eccbb621aa372 http://mywordpressblog.com`
+
+By default, wordstress doesn't look for inactive themes or inactive plugins
+vulnerabilities. This means that if `foobar_plugin` installed version is
+vulnerable to privilege escalation, wordstress scanner by default won't raise
+an alarm if the `foobar_plugin` **is not active**.
+
+If you want to include vulnerabilities for all themes and vulnerabilities you
+can use -T and -P flags.
+
+`$ wordstress -k d4a34e43b5d74c822830b5c4690eccbb621aa372 -T -P http://mywordpressblog.com`
+
+Examples:
+$ wordstress -k d4a34e43b5d74c822830b5c4690eccbb621aa372 -B basic_user:basic_password http://mywordpressblog.com
+
+-k, --key                            uses the key to access wordstress plugin content on target website
+-B, --basic-auth user:pwd            uses 'user' and 'pwd' as basic auth credentials to target website
+
+Plugins and themes specific flags
+
+-T, --fetch-all-themes-vulns         retrieves vulnerabilities also for inactive themes
+-P, --fetch-all-plugins-vulns        retrieves vulnerabilities also for inactive plugins
+
+Service flags
+
+-D, --debug                          enters dawn debug mode
+-v, --version                        shows version information
+-h, --help                           shows this help
+
 ## Online resource
 
 [Wordstress homepage](http://wordstress.org)
@@ -113,6 +147,6 @@ a better idea to start authenticated from the beginning.
 
 1. Fork it ( https://github.com/[my-github-username]/wordstress/fork )
 2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
+  3. Commit your changes (`git commit -am 'Add some feature'`)
 4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
+  5. Create a new Pull Request

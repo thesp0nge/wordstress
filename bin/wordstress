@@ -11,7 +11,7 @@ APPNAME = File.basename($0)
 trap("INT")   { $logger.die('[INTERRUPTED]') }
 
 $logger  = Codesake::Commons::Logging.instance
-$logger.debug = false
+# $logger.debug = false
 @output_root = File.join(Dir.home, 'wordstress')
 
 whitebox      = {:url=>"", :key=>""}

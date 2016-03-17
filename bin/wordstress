@@ -6,10 +6,7 @@ require 'fileutils'
 require 'codesake-commons'
 require 'yaml'
 
-#require 'wordstress'
-require_relative '../lib/wordstress/site.rb'
-require_relative '../lib/wordstress/utils.rb'
-require_relative '../lib/wordstress/version.rb'
+require 'wordstress'
 
 APPNAME = File.basename($0)
 trap("INT")   { $logger.die('[INTERRUPTED]') }

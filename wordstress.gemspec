@@ -6,7 +6,7 @@ require 'wordstress/version'
 Gem::Specification.new do |spec|
   spec.name          = "wordstress"
   spec.version       = Wordstress::VERSION
-  spec.authors       = ["Paolo Perego"]
+  spec.authors       = ["Paolo Perego", "markri"]
   spec.email         = ["paolo@wordstress.org"]
   spec.summary       = %q{wordstress is a security scanner for wordpress powered websites}
   spec.description   = %q{wordstress is a security scanner for wordpress powered websites. Site owners don't want to spend time in reading complex blackbox security scan

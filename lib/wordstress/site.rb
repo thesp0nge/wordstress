@@ -7,7 +7,7 @@ module Wordstress
     attr_reader :version, :wp_vuln, :plugins, :themes
     attr_accessor :theme_vulns, :plugin_vulns, :online
 
-    def initialize(options={:whitebox=>{:url=>"http://localhost/wordstress", :key=>""}, :basic_auth=>{:user=>"", :pwd=>""}, :output_dir=>"./"})
+    def initialize(options={:whitebox=>{:url=>"http://localhost/wordstress", :key=>""}, :basic_auth=>{:user=>"", :pwd=>""}, :output_dir=>nil})
       begin
         @uri      = URI(options[:whitebox][:url])
         @valid    = true
@@ -41,10 +41,10 @@ module Wordstress
       @end_time = Time.now
     end
 
-    def get_plugin_vulnerabilities(theme)
+    def get_plugin_vulnerabilities(plugin)
       begin
-        json= get_https("https://wpvulndb.com/api/v1/plugins/#{theme}").body
-        return JSON.parse("{\"plugin\":{\"vulnerabilities\":[]}}") if json.include?"The page you were looking for doesn't exist (404)"
+        json= get_https("https://wpvulndb.com/api/v2/plugins/#{plugin}").body
+        return JSON.parse("{\"#{plugin}\":{\"vulnerabilities\":[]}}") if json.include?"The page you were looking for doesn't exist (404)"
         return JSON.parse(json)
       rescue => e
         $logger.err e.message
@@ -55,8 +55,8 @@ module Wordstress
 
     def get_theme_vulnerabilities(theme)
       begin
-        json=get_https("https://wpvulndb.com/api/v1/themes/#{theme}").body
-        return JSON.parse("{\"theme\":{\"vulnerabilities\":[]}}") if json.include?"The page you were looking for doesn't exist (404)"
+        json=get_https("https://wpvulndb.com/api/v2/themes/#{theme}").body
+        return JSON.parse("{\"#{theme}\":{\"vulnerabilities\":[]}}") if json.include?"The page you were looking for doesn't exist (404)"
         return JSON.parse(json)
       rescue => e
         $logger.err e.message
@@ -67,9 +67,9 @@ module Wordstress
 
     def get_wp_vulnerabilities
       begin
-        page= get_https("https://wpvulndb.com/api/v1/wordpresses/#{version_pad(@version[:version])}")
+        page=get_https("https://wpvulndb.com/api/v2/wordpresses/#{version_pad(@version[:version])}")
         return JSON.parse(page.body) unless page.class == Net::HTTPNotFound
-        return JSON.parse("{\"wordpress\":{\"vulnerabilities\":[]}}") if page.class == Net::HTTPNotFound
+        return JSON.parse("{\"#{@version[:version]}\":{\"vulnerabilities\":[]}}") if page.class == Net::HTTPNotFound
       rescue => e
         $logger.err e.message
         @online = false unless e.message.include?"403"
@@ -143,7 +143,7 @@ module Wordstress
       return table unless @online
       # 1_vulnerability summary
       rows = []
-      rows << ['Wordpress version', @wp_vuln["wordpress"]["vulnerabilities"].count]
+      rows << ['Wordpress version', @wp_vuln[version[:version]]["vulnerabilities"].count]
       rows << ['Plugins installed', @plugin_vulns.count]
       rows << ['Themes installed', @theme_vulns.count]
 
@@ -152,11 +152,11 @@ module Wordstress
 
       # 2_vulnerabilities detail
 
-      if @wp_vuln["wordpress"]["vulnerabilities"].count != 0
+      if @wp_vuln[version[:version]]["vulnerabilities"].count != 0
 
         rows = []
-        @wp_vuln["wordpress"]["vulnerabilities"].each do |v|
-          rows << [v[:title], v[:cve], v[:url], v[:fixed_in]]
+        @wp_vuln[version[:version]]["vulnerabilities"].each do |v|
+          rows << [v[:title], v[:references][:cve], v[:references][:url], v[:fixed_in]]
           rows << :separator
         end
         table = Terminal::Table.new :title=>"Vulnerabilities in Wordpress version #{version[:version]}", :headings=>['Issue', 'CVE', 'Url', 'Fixed in version'], :rows=>rows
@@ -184,30 +184,75 @@ module Wordstress
         puts table
       end
 
+      if @output_dir
 
+        File.open(File.join(@output_dir, "report.txt"), 'w') do |file|
 
+          file.puts("target: #{@target}")
+          file.puts("wordpress version: #{version[:version]}")
+          file.puts("themes found: #{@themes.count}")
+          file.puts("plugins found: #{@plugins.count}")
+          file.puts("Vulnerabilities in wordpress:")
 
+          if @wp_vuln[version[:version]]["vulnerabilities"].empty?
+            file.puts " - No vulnerabilities found"
+          end
+          @wp_vuln[version[:version]]["vulnerabilities"].each do |v|
+            file.puts " - #{v[:title]} - fixed in #{v[:fixed_in]}"
+          end
 
-      # File.open(File.join(@output_dir, "report.txt"), 'w') do |file|
+          file.puts("Vulnerabilities in themes:")
+          if @theme_vulns.empty?
+            file.puts " - No vulnerabilities found"
+          end
+          @theme_vulns.each do |v|
+            file.puts " - #{v[:title]} - fixed in #{v[:fixed_in]}"
+          end
 
-      # file.puts("target: #{@target}")
-      # file.puts("wordpress version: #{version[:version]}")
-      # file.puts("themes found: #{@themes.count}")
-        # file.puts("plugins found: #{@plugins.count}")
-        # file.puts("Vulnerabilities in wordpress")
-        # @wp_vuln["wordpress"]["vulnerabilities"].each do |v|
-          # file.puts "#{v[:title]} - fixed in #{v[:fixed_in]}"
-        # end
-        # file.puts("Vulnerabilities in themes")
-        # @theme_vulns.each do |v|
-          # file.puts "#{v[:title]} - fixed in #{v[:fixed_in]}"
-        # end
-        # file.puts("Vulnerabilities in plugins")
-        # @plugins_vulns.each do |v|
-          # file.puts "#{v[:title]} - fixed in #{v[:fixed_in]}"
-        # end
-      # end
+          file.puts("Vulnerabilities in plugins:")
+          if @plugin_vulns.empty?
+            file.puts " - No vulnerabilities found"
+          end
+          @plugin_vulns.each do |v|
+            file.puts " - #{v[:title]} - fixed in #{v[:fixed_in]}"
+          end
+        end
+      end
     end
+
+    def vulnerabilitycount
+      return @wp_vuln[version[:version]]["vulnerabilities"].count + @plugin_vulns.count + @theme_vulns.count
+    end
+
+    def json_report
+      total = vulnerabilitycount()
+      vulnerabilities = [:total => total, :wp => @wp_vuln[version[:version]]["vulnerabilities"], :plugins => @plugin_vulns, :themes => @theme_vulns]
+      puts JSON.pretty_generate(vulnerabilities)
+    end
+
+
+    def nagios_report
+      wpcount = @wp_vuln[version[:version]]["vulnerabilities"].count
+      plugincount = @plugin_vulns.count
+      themecount = @theme_vulns.count
+
+      type = "OK"
+      exitcode = 0
+
+      if themecount > 0
+        type = "WARNING"
+        exitcode = 1
+      end
+
+      if wpcount > 0 || plugincount > 0
+        type = "CRITICAL"
+        exitcode = 2
+      end
+
+      puts "#{type} - #{wpcount} wordpress vulnerabilities, #{plugincount} plugin vulnerabilities and #{themecount} theme vulnerabilities found"
+      return exitcode
+    end
+
 
     private
     def is_already_detected?(array, name)

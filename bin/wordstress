@@ -4,6 +4,7 @@ require 'getoptlong'
 require 'json'
 require 'fileutils'
 require 'codesake-commons'
+require 'yaml'
 
 require 'wordstress'
 
@@ -11,10 +12,10 @@ APPNAME = File.basename($0)
 trap("INT")   { $logger.die('[INTERRUPTED]') }
 
 $logger  = Codesake::Commons::Logging.instance
-# $logger.debug = false
+$logger.silence = true
 @output_root = File.join(Dir.home, 'wordstress')
 
-whitebox      = {:url=>"", :key=>""}
+whitebox      = {:url=>"", :key=>"", :output=>"tabular", :store=>false, :debug=>false}
 basic_auth    = {:user=>"", :pwd=>""}
 
 opts    = GetoptLong.new(
@@ -24,6 +25,8 @@ opts    = GetoptLong.new(
   [ '--whitebox' ,              '-W',   GetoptLong::NO_ARGUMENT],
   #deprecated
   [ '--wordstress-url',         '-u',   GetoptLong::REQUIRED_ARGUMENT],
+  [ '--store',                  '-s',   GetoptLong::NO_ARGUMENT],
+  [ '--output',                 '-o',   GetoptLong::REQUIRED_ARGUMENT],
   [ '--fetch-all-themes-vulns', '-T',   GetoptLong::NO_ARGUMENT],
   [ '--fetch-all-plugins-vulns','-P',   GetoptLong::NO_ARGUMENT],
   [ '--basic-auth',             '-B',   GetoptLong::REQUIRED_ARGUMENT],
@@ -36,102 +39,147 @@ opts    = GetoptLong.new(
 
 opts.quiet=true
 deprecation_warning = false
-
 begin
-  opts.each do |opt, val|
-    case opt
-    when '--basic-auth'
-      basic_auth[:user] = val.split(':')[0]
-      basic_auth[:pwd] = val.split(':')[1]
-    when '--whitebox'
-      deprecation_warning = true
-    when '--wordstress-url'
-      deprecation_warning = true
-      whitebox[:url] = val
-    when '--key'
-      whitebox[:key] = val
-    when '--version'
-      puts "#{Wordstress::VERSION}"
-      Kernel.exit(0)
-    when '--debug'
-      $logger.debug = true
-    when '--help'
-      Wordstress::Utils.help
-      Kernel.exit(0)
+  begin
+    opts.each do |opt, val|
+      case opt
+      when '--basic-auth'
+        basic_auth[:user] = val.split(':')[0]
+        basic_auth[:pwd] = val.split(':')[1]
+      when '--whitebox'
+        deprecation_warning = true
+      when '--wordstress-url'
+        deprecation_warning = true
+        whitebox[:url] = val
+      when '--key'
+        whitebox[:key] = val
+      when '--store'
+        whitebox[:store] = true
+      when '--output'
+        outputoptions = ['json', 'nagios', 'tabular']
+        if !outputoptions.include?(val)
+          raise 'Invalid output option'
+        end
+        whitebox[:output] = val
+      when '--version'
+        puts "#{Wordstress::VERSION}"
+        Kernel.exit(0)
+      when '--debug'
+        $logger.silence = false
+        whitebox[:debug] = true
+      when '--help'
+        Wordstress::Utils.help
+        Kernel.exit(0)
+      end
     end
+  rescue GetoptLong::InvalidOption => e
+    $logger.helo APPNAME, Wordstress::VERSION
+    $logger.err e.message
+    Kernel.exit(3)
   end
-rescue GetoptLong::InvalidOption => e
-  $logger.helo APPNAME, Wordstress::VERSION
-  $logger.err e.message
-  Kernel.exit(-1)
-end
 
-$logger.helo APPNAME, Wordstress::VERSION
-$logger.warn "-G, -W, -u flags are deprecated and they will be soon removed. whitebox scanning will be the only supported option" if deprecation_warning
-
-if whitebox[:url].empty?
-  whitebox[:url]="#{ARGV.shift}/wordstress"
-  $logger.warn "assuming wordstress virtual page to be found at #{whitebox[:url]}"
-end
-
-unless Dir.exists?(@output_root)
-  $logger.log "creating output dir #{@output_root}"
-  Dir.mkdir @output_root
-end
-
-@output_dir = Wordstress::Utils.build_output_dir(@output_root, whitebox[:url])
-$logger.log "storing results to #{@output_dir}"
-FileUtils::mkdir_p(@output_dir)
-
-$logger.die("missing target") if whitebox[:url].nil?
-
-$logger.log "scanning #{whitebox[:url]}"
-site = Wordstress::Site.new({:whitebox=>whitebox,:basic_auth=>basic_auth, :output_dir=>@output_dir})
-
-$logger.ok "#{Wordstress::Utils.url_to_target(whitebox[:url])} is a wordpress version #{site.version[:version]} with #{site.themes.count} themes and #{site.plugins.count} plugins"
-
-if site.online?
-  site.wp_vuln["wordpress"]["vulnerabilities"].each do |v|
-    $logger.err "#{v["title"]}. Detected: #{site.version[:version]}. Safe: #{v["fixed_in"]}" if Gem::Version.new(site.version[:version]) <= Gem::Version.new(v["fixed_in"])
+  if ARGV.length == 0
+    Wordstress::Utils.help
+    Kernel.exit(0)
   end
-  site.themes.each do |t|
 
-    if t[:status] == "inactive"
-      $logger.debug "Theme #{t[:name]} is inactive no looking for vulns. Use '--fetch-all-themes-vulns' flag to fetch inactive theme vulnerabilities"
-    else
-      v = site.get_theme_vulnerabilities(t[:name])
-      unless v["theme"].nil?
-        v["theme"]["vulnerabilities"].each do |vv|
-          if Gem::Version.new(t[:version]) <= Gem::Version.new(vv["fixed_in"])
-            $logger.err "Theme #{vv["title"]} is vulnerable. Detected: #{t[:version]}. Safe: #{vv["fixed_in"]}"
-            site.theme_vulns << {:title=>vv["title"], :cve=>vv["cve"], :url=>vv["url"], :detected=>t[:version], :fixed_in=>vv["fixed_in"]}
+  if !$logger.silence
+    $logger.helo APPNAME, Wordstress::VERSION
+  end
+  $logger.warn "-G, -W, -u flags are deprecated and they will be soon removed. whitebox scanning will be the only supported option" if deprecation_warning
+
+  if whitebox[:url].empty?
+    whitebox[:url]="#{ARGV.shift}/wordstress"
+    $logger.warn "assuming wordstress virtual page to be found at #{whitebox[:url]}"
+  end
+
+  if !whitebox[:store].nil?
+    unless Dir.exists?(@output_root)
+      $logger.log "creating output dir #{@output_root}"
+      Dir.mkdir @output_root
+    end
+
+    @output_dir = Wordstress::Utils.build_output_dir(@output_root, whitebox[:url])
+    $logger.log "storing results to #{@output_dir}"
+    FileUtils::mkdir_p(@output_dir)
+  end
+
+  $logger.die("missing target") if whitebox[:url].nil?
+
+  $logger.log "scanning #{whitebox[:url]}"
+
+  if @output_dir.nil?
+    site = Wordstress::Site.new({:whitebox=>whitebox,:basic_auth=>basic_auth})
+  else
+    site = Wordstress::Site.new({:whitebox=>whitebox,:basic_auth=>basic_auth, :output_dir=>@output_dir})
+  end
+
+
+  $logger.ok "#{Wordstress::Utils.url_to_target(whitebox[:url])} is a wordpress version #{site.version[:version]} with #{site.themes.count} themes and #{site.plugins.count} plugins"
+
+  if site.online?
+    site.wp_vuln[site.version[:version]]["vulnerabilities"].each do |v|
+      $logger.err "#{v["title"]}. Detected: #{site.version[:version]}. Safe: #{v["fixed_in"]}" if Gem::Version.new(site.version[:version]) <= Gem::Version.new(v["fixed_in"])
+    end
+
+    site.themes.each do |t|
+      if t[:status] == "inactive"
+        $logger.debug "Theme #{t[:name]} is inactive no looking for vulns. Use '--fetch-all-themes-vulns' flag to fetch inactive theme vulnerabilities"
+      else
+        v = site.get_theme_vulnerabilities(t[:name])
+        unless v[t[:name]].nil?
+          v[t[:name]]["vulnerabilities"].each do |vv|
+            if Gem::Version.new(t[:version]) <= Gem::Version.new(vv["fixed_in"])
+              $logger.err "Theme #{vv["title"]} is vulnerable. Detected: #{t[:version]}. Safe: #{vv["fixed_in"]}"
+              site.theme_vulns << {:title=>vv["title"], :cve=>vv["references"]["cve"], :url=>vv["references"]["url"], :detected=>t[:version], :fixed_in=>vv["fixed_in"]}
+            end
           end
         end
-      end
-    end # if t[:status] == "inactive"
-  end
+      end # if t[:status] == "inactive"
+    end
 
-  site.plugins.each do |t|
-    if t[:status] == "inactive"
-      $logger.debug "Plugin #{t[:name]} is inactive no looking for vulns. Use '--fetch-all-plugins-vulns' flag to fetch inactive plugin vulnerabilities"
-    else
-      v = site.get_plugin_vulnerabilities(t[:name])
-      unless v["plugin"].nil?
-        v["plugin"]["vulnerabilities"].each do |vv|
-          if Gem::Version.new(t[:version]) <= Gem::Version.new(vv["fixed_in"])
-            $logger.err "Plugin #{vv["title"]} is vulnerable. Detected: #{t[:version]}. Safe: #{vv["fixed_in"]}"
-            site.plugin_vulns << {:title=>vv["title"], :cve=>vv["cve"], :url=>vv["url"], :detected=>t[:version], :fixed_in=>vv["fixed_in"]}
+    site.plugins.each do |t|
+      if t[:status] == "inactive"
+        $logger.debug "Plugin #{t[:name]} is inactive no looking for vulns. Use '--fetch-all-plugins-vulns' flag to fetch inactive plugin vulnerabilities"
+      else
+        v = site.get_plugin_vulnerabilities(t[:name])
+        unless v[t[:name]].nil?
+          v[t[:name]]["vulnerabilities"].each do |vv|
+            if Gem::Version.new(t[:version]) <= Gem::Version.new(vv["fixed_in"])
+              $logger.err "Plugin #{vv["title"]} is vulnerable. Detected: #{t[:version]}. Safe: #{vv["fixed_in"]}"
+              site.plugin_vulns << {:title=>vv["title"], :cve=>vv["references"]["cve"], :url=>vv["references"]["url"], :detected=>t[:version], :fixed_in=>vv["fixed_in"]}
+            end
           end
         end
-      end
-    end # if t[:status] == "inactive"
+      end # if t[:status] == "inactive"
+    end
+  else
+    site.online = false
+    $logger.err "it seems we are offline. wordstress can't reach https://wpvulndb.com"
+    $logger.err "wordstress can't enumerate vulnerabilities"
   end
-else
-  site.online = false
-  $logger.err "it seems we are offline. wordstress can't reach https://wpvulndb.com"
-  $logger.err "wordstress can't enumerate vulnerabilities"
-end
 
-site.stop_scan
-site.ascii_report
-$logger.bye
+  site.stop_scan
+
+  case whitebox[:output]
+  when 'tabular'
+    site.ascii_report
+  when 'json'
+    site.json_report
+  when 'nagios'
+    exitcode = site.nagios_report
+    Kernel.exit(exitcode)
+  end
+
+  if !$logger.silence
+    $logger.bye
+  end
+rescue StandardError => e
+  if whitebox[:debug]
+    raise e
+  else
+    puts "Exception occurred: " + e.message
+    Kernel.exit(3)
+  end
+
+end
